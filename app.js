@@ -1,288 +1,1801 @@
-/* =========================================================
-   MULTI-CROP SOIL ADVISOR - HAWCC JAVASCRIPT VERSION
-   No Python, Streamlit, pandas or scikit-learn required.
-   ========================================================= */
+const express = require("express");
+const fs = require("fs");
+const path = require("path");
 
-const FEATURES = ["moisture","temperature","ph","ec","nitrogen","phosphorus","potassium"];
+const app = express();
+const PORT = process.env.PORT || 8501;
 
-const ROTATION = {
-  TOMATO:{growing_season:90,crop_type:"Vegetable",nitrogen_usage:"High",benefits:"Enriches P and K"},
-  RAGI:{growing_season:100,crop_type:"Cereal",nitrogen_usage:"Medium",benefits:"Good break crop"},
-  RICE:{growing_season:120,crop_type:"Cereal",nitrogen_usage:"High",benefits:"Supports wet-season rotation"},
-  MAIZE:{growing_season:100,crop_type:"Cereal",nitrogen_usage:"High",benefits:"Good for soil structure"},
-  JOWAR:{growing_season:100,crop_type:"Cereal",nitrogen_usage:"Low",benefits:"Drought tolerant"},
-  BAJRA:{growing_season:75,crop_type:"Cereal",nitrogen_usage:"Low",benefits:"Quick cycle crop"},
-  WHEAT:{growing_season:120,crop_type:"Cereal",nitrogen_usage:"High",benefits:"Good cool-season crop"},
-  RED_GRAM:{growing_season:180,crop_type:"Pulse",nitrogen_usage:"Low",benefits:"Adds biological nitrogen"},
-  GREEN_GRAM:{growing_season:70,crop_type:"Pulse",nitrogen_usage:"Low",benefits:"Adds biological nitrogen"},
-  BLACK_GRAM:{growing_season:75,crop_type:"Pulse",nitrogen_usage:"Low",benefits:"Adds biological nitrogen"},
-  BENGAL_GRAM:{growing_season:110,crop_type:"Pulse",nitrogen_usage:"Low",benefits:"Adds biological nitrogen"},
-  GROUNDNUT:{growing_season:110,crop_type:"Oilseed",nitrogen_usage:"Low",benefits:"Improves soil nitrogen"},
-  SUNFLOWER:{growing_season:100,crop_type:"Oilseed",nitrogen_usage:"Medium",benefits:"Useful oilseed rotation crop"},
-  SOYBEAN:{growing_season:105,crop_type:"Pulse",nitrogen_usage:"Low",benefits:"Adds biological nitrogen"},
-  SUGARCANE:{growing_season:365,crop_type:"Commercial",nitrogen_usage:"High",benefits:"Long-duration cash crop"},
-  COTTON:{growing_season:180,crop_type:"Commercial",nitrogen_usage:"High",benefits:"Supports fibre production"},
-  ONION:{growing_season:120,crop_type:"Vegetable",nitrogen_usage:"Medium",benefits:"Good short rotation crop"},
-  POTATO:{growing_season:100,crop_type:"Tuber",nitrogen_usage:"High",benefits:"Improves soil turnover"},
-  BRINJAL:{growing_season:150,crop_type:"Vegetable",nitrogen_usage:"High",benefits:"Long harvest window"},
-  CHILLI:{growing_season:150,crop_type:"Vegetable",nitrogen_usage:"Medium",benefits:"Good value crop"},
-  OKRA:{growing_season:100,crop_type:"Vegetable",nitrogen_usage:"Medium",benefits:"Quick harvest crop"},
-  CABBAGE:{growing_season:90,crop_type:"Vegetable",nitrogen_usage:"High",benefits:"Good cool-season crop"},
-  CAULIFLOWER:{growing_season:100,crop_type:"Vegetable",nitrogen_usage:"High",benefits:"Good cool-season crop"},
-  CARROT:{growing_season:90,crop_type:"Root",nitrogen_usage:"Medium",benefits:"Improves soil turnover"},
-  BEANS:{growing_season:75,crop_type:"Pulse",nitrogen_usage:"Low",benefits:"Adds biological nitrogen"},
-  CUCUMBER:{growing_season:75,crop_type:"Vegetable",nitrogen_usage:"Medium",benefits:"Quick cycle crop"},
-  WATERMELON:{growing_season:100,crop_type:"Fruit",nitrogen_usage:"Medium",benefits:"Good warm-season crop"},
-  BANANA:{growing_season:365,crop_type:"Fruit",nitrogen_usage:"High",benefits:"Long-term fruit production"},
-  MANGO:{growing_season:365,crop_type:"Fruit",nitrogen_usage:"Medium",benefits:"Long-term orchard crop"},
-  POMEGRANATE:{growing_season:365,crop_type:"Fruit",nitrogen_usage:"Medium",benefits:"Drought-tolerant orchard crop"},
-  GRAPES:{growing_season:180,crop_type:"Fruit",nitrogen_usage:"Medium",benefits:"Supports perennial fruit production"},
-  COCONUT:{growing_season:365,crop_type:"Plantation",nitrogen_usage:"High",benefits:"Long-term plantation crop"},
-  ARECANUT:{growing_season:365,crop_type:"Plantation",nitrogen_usage:"High",benefits:"Long-term plantation crop"},
-  COFFEE:{growing_season:365,crop_type:"Plantation",nitrogen_usage:"Medium",benefits:"Shade-friendly perennial crop"},
-  BLACK_PEPPER:{growing_season:365,crop_type:"Spice",nitrogen_usage:"Medium",benefits:"High-value perennial spice"},
-  CARDAMOM:{growing_season:365,crop_type:"Spice",nitrogen_usage:"Medium",benefits:"Shade-friendly spice crop"},
-  GINGER:{growing_season:240,crop_type:"Spice",nitrogen_usage:"Medium",benefits:"Improves soil turnover"},
-  TURMERIC:{growing_season:240,crop_type:"Spice",nitrogen_usage:"Medium",benefits:"Good soil-covering crop"},
-  SESAME:{growing_season:90,crop_type:"Oilseed",nitrogen_usage:"Low",benefits:"Drought tolerant oilseed"},
-  CASTOR:{growing_season:180,crop_type:"Oilseed",nitrogen_usage:"Medium",benefits:"Deep-rooted rotation crop"},
-  FINGER_MILLET:{growing_season:100,crop_type:"Cereal",nitrogen_usage:"Medium",benefits:"Drought tolerant cereal"}
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+const BASE_DIR = __dirname;
+const RULE_FILE = path.join(BASE_DIR, "crop_profiles.json");
+const CSV_FILE = path.join(BASE_DIR, "training_data_template.csv");
+
+let PROFILE_DATA = { crops: {} };
+
+try {
+  PROFILE_DATA = JSON.parse(
+    fs.readFileSync(RULE_FILE, "utf8")
+  );
+} catch (error) {
+  console.warn(
+    "crop_profiles.json not found. Put it beside app.js."
+  );
+}
+
+const CROPS = PROFILE_DATA.crops || {};
+
+const FEATURES = [
+  "moisture",
+  "temperature",
+  "ph",
+  "ec",
+  "nitrogen",
+  "phosphorus",
+  "potassium"
+];
+
+const CROP_ROTATION_DATA = {
+  TOMATO: {
+    growing_season: 60,
+    crop_type: "Heavy Feeder",
+    nitrogen_usage: "High",
+    benefits: "Enriches P and K"
+  },
+
+  RAGI: {
+    growing_season: 90,
+    crop_type: "Cereal",
+    nitrogen_usage: "Medium",
+    benefits: "Good break crop"
+  },
+
+  RICE: {
+    growing_season: 120,
+    crop_type: "Cereal",
+    nitrogen_usage: "High",
+    benefits: "Nitrogen fixer"
+  },
+
+  MAIZE: {
+    growing_season: 75,
+    crop_type: "Heavy Feeder",
+    nitrogen_usage: "High",
+    benefits: "Good for soil structure"
+  },
+
+  JOWAR: {
+    growing_season: 100,
+    crop_type: "Cereal",
+    nitrogen_usage: "Low",
+    benefits: "Drought tolerant"
+  },
+
+  BAJRA: {
+    growing_season: 65,
+    crop_type: "Cereal",
+    nitrogen_usage: "Low",
+    benefits: "Quick cycle crop"
+  }
 };
 
-let CROPS = {};
-let serialPort = null;
-let reader = null;
-let serialBuffer = "";
-
-const $ = id => document.getElementById(id);
-const n = id => Number($(id).value);
-
-function label(crop){ return crop.replaceAll("_"," "); }
-
-async function loadProfiles(){
-  try{
-    const r = await fetch("crop_profiles.json");
-    if(!r.ok) throw new Error("crop_profiles.json not found");
-    const data = await r.json();
-    CROPS = data.crops || {};
-  }catch(e){
-    // Minimal fallback so the app still opens if the JSON file was not copied.
-    CROPS = {};
-    Object.keys(ROTATION).forEach(c => {
-      CROPS[c] = {ranges:{
-        moisture:{low:35,high:70,default:50},
-        temperature:{low:18,high:30,default:25},
-        ph:{low:5.5,high:7.5,default:6.5},
-        ec:{low:0.5,high:2,default:1},
-        nitrogen:{low:40,high:120,default:80},
-        phosphorus:{low:20,high:80,default:40},
-        potassium:{low:40,high:150,default:80}
-      },advice:["Keep soil parameters inside the recommended range.","Use irrigation according to moisture.","Apply targeted nutrients after soil testing."]};
-    });
+function parameterStatus(value, low, high) {
+  if (value < low) {
+    return "LOW";
   }
-  populateCrops();
-}
 
-function populateCrops(){
-  const names = Object.keys(CROPS);
-  ["crop","crop1","crop2","crop3"].forEach(id=>{
-    const el=$(id); el.innerHTML="";
-    names.forEach(c=>{
-      const o=document.createElement("option"); o.value=c;o.textContent=label(c);el.appendChild(o);
-    });
-  });
-  setDefaults();
-}
+  if (value > high) {
+    return "HIGH";
+  }
 
-function setDefaults(){
-  const c=$("crop").value;
-  const r=CROPS[c]?.ranges;
-  if(!r)return;
-  FEATURES.forEach(f=>$(f).value=r[f]?.default ?? 0);
-}
-
-$("crop").addEventListener("change",setDefaults);
-
-function values(){
-  return {
-    moisture:n("moisture"),temperature:n("temperature"),ph:n("ph"),ec:n("ec"),
-    nitrogen:n("nitrogen"),phosphorus:n("phosphorus"),potassium:n("potassium")
-  };
-}
-
-function status(v,range){
-  if(v<range.low)return "LOW";
-  if(v>range.high)return "HIGH";
   return "OK";
 }
 
-/* Browser-side replacement for the Python ML pipeline:
-   It produces a health class and confidence from all 7 configured
-   crop parameters. It is deterministic and requires no Python package. */
-function predictHealth(v, crop){
-  const ranges=CROPS[crop].ranges;
-  let ok=0, distance=0;
-  FEATURES.forEach(f=>{
-    const r=ranges[f], span=Math.max(r.high-r.low,0.001);
-    if(v[f]>=r.low && v[f]<=r.high) ok++;
-    else distance += v[f]<r.low ? (r.low-v[f])/span : (v[f]-r.high)/span;
-  });
-  const score=ok/FEATURES.length;
-  let prediction, confidence;
-  if(score>=0.85){prediction="Healthy";confidence=75+score*25;}
-  else if(score>=0.55){prediction="Warning";confidence=60+score*30;}
-  else {prediction="Critical";confidence=65+(1-score)*30;}
-  return {prediction,confidence:Math.min(99.9,confidence),ok,distance};
-}
+function generateAlerts(crop, values) {
+  const ranges = CROPS[crop]?.ranges || {};
 
-function soilType(v){
-  let type, chars=[];
-  if(v.ph<6){type="Acidic Soil";chars.push("Acidic — consider lime after confirming with a soil test.");}
-  else if(v.ph>7.5){type="Alkaline Soil";chars.push("Alkaline — consider sulfur or organic matter.");}
-  else {type="Neutral Soil";chars.push("Neutral pH — suitable for many crops.");}
-  if(v.ec>2)chars.push("High salinity — drainage improvement may be needed.");
-  else if(v.ec<0.5)chars.push("Low EC/fertility indication — consider nutrient management.");
-  if(v.moisture<30)chars.push("Dry soil — improve water retention and irrigation.");
-  else if(v.moisture>70)chars.push("High moisture — improve drainage to prevent waterlogging.");
-  else chars.push("Good moisture retention.");
-  if(v.nitrogen<40)chars.push("Low nitrogen — consider nitrogen fertilizer based on soil-test recommendation.");
-  if(v.nitrogen>120)chars.push("High nitrogen — avoid over-fertilization.");
-  return {type,chars};
-}
+  const alerts = [];
+  const statuses = {};
 
-function analyze(){
-  const crop=$("crop").value,v=values(),r=CROPS[crop].ranges;
-  const pred=predictHealth(v,crop), soil=soilType(v);
-  let alerts=[], rows=[];
-  FEATURES.forEach(f=>{
-    const s=status(v[f],r[f]);
-    if(s!=="OK")alerts.push(`${f.toUpperCase()} is ${s}.`);
-    rows.push(`<tr><td>${f.toUpperCase()}</td><td>${v[f].toFixed(2)}</td><td>${r[f].low} - ${r[f].high}</td><td class="${s==="OK"?"ok":s.toLowerCase()}">${s}</td></tr>`);
-  });
-  const irrigation=v.moisture<r.moisture.low?"🚰 IRRIGATION REQUIRED":v.moisture>r.moisture.high?"💧 SOIL TOO WET":"✅ MOISTURE NORMAL";
-  const advice=CROPS[crop].advice||[];
-  const alternatives=findAlternatives(v,crop);
-
-  $("result").innerHTML=`
-    <div class="panel">
-      <h2>🏞️ Soil Type Analysis</h2><h3>${soil.type}</h3>${soil.chars.map(x=>`<p>${x}</p>`).join("")}
-    </div>
-    <div class="cards">
-      <div class="card ${pred.prediction.toLowerCase()}"><div>Soil Health</div><div class="metric">${pred.prediction}</div></div>
-      <div class="card"><div>AI-style Confidence</div><div class="metric">${pred.confidence.toFixed(1)}%</div></div>
-      <div class="card"><div>Selected Crop</div><div class="metric">${label(crop)}</div></div>
-    </div>
-    <div class="panel"><h2>### Parameter Analysis</h2>
-      <table><thead><tr><th>Parameter</th><th>Value</th><th>Crop Range</th><th>Status</th></tr></thead>
-      <tbody>${rows.join("")}</tbody></table>
-    </div>
-    <div class="panel"><h2>💧 Irrigation Alert</h2><div class="${v.moisture<r.moisture.low?"alert":v.moisture>r.moisture.high?"error":"success"}">${irrigation}</div></div>
-    <div class="panel"><h2>⚠️ Parameter Alerts</h2>${alerts.length?alerts.map(a=>`<div class="alert">${a}</div>`).join(""):`<div class="success">All monitored parameters are within the configured crop ranges.</div>`}</div>
-    <div class="panel"><h2>🌱 Crop Advice</h2>${advice.map(a=>`<p>• ${a}</p>`).join("")}</div>
-    ${pred.prediction!=="Healthy"?`<div class="panel"><h2>🌾 Soil Condition Analysis</h2>
-      <h3>Option 1: Improve Current Crop</h3>
-      <p>Adjust parameters toward the recommended range, use irrigation/drainage as needed and apply targeted fertilizers.</p>
-      <h3>Option 2: Switch to Suitable Crop</h3>
-      ${alternatives.length?alternatives.map((a,i)=>`<p><b>${i+1}. ${label(a.crop)}</b> — Compatibility: ${a.score.toFixed(1)}%</p>`).join(""):"<p>No strong alternative found in the loaded training/profile data.</p>"}
-    </div>`:""}
-  `;
-}
-
-function findAlternatives(v,current){
-  return Object.keys(CROPS).filter(c=>c!==current).map(c=>{
-    const r=CROPS[c].ranges; let m=0;
-    FEATURES.forEach(f=>{if(v[f]>=r[f].low&&v[f]<=r[f].high)m++;});
-    return {crop:c,score:m/FEATURES.length*100};
-  }).filter(x=>x.score>=70).sort((a,b)=>b.score-a.score).slice(0,3);
-}
-
-function planRotation(){
-  const selected=[$("crop1").value,$("crop2").value,$("crop3").value].filter(Boolean);
-  const v=values();
-  const ranked=selected.map(c=>{
-    const r=CROPS[c].ranges;let score=0;
-    ["nitrogen","phosphorus","potassium"].forEach(f=>{if(v[f]>=r[f].low&&v[f]<=r[f].high)score+=2;});
-    if(ROTATION[c]?.nitrogen_usage==="Low")score++;
-    return {crop:c,score};
-  }).sort((a,b)=>b.score-a.score);
-  let day=0,total=0,html='<div class="timeline">';
-  ranked.forEach((x,i)=>{
-    const d=ROTATION[x.crop]?.growing_season||100;
-    const start=day,end=day+d;
-    html+=`<div class="timeline-item"><b>Step ${i+1}: ${label(x.crop)}</b><br>Duration: ${d} days<br>Days ${start}–${end}<br>Type: ${ROTATION[x.crop]?.crop_type||"Crop"}<br>N Usage: ${ROTATION[x.crop]?.nitrogen_usage||"Medium"}<br>Benefit: ${ROTATION[x.crop]?.benefits||"Rotation benefit"}</div>`;
-    day=end+14;total=end;
-  });
-  html+=`</div><div class="success"><b>Total Rotation Cycle:</b> ${total} days (${(total/30).toFixed(1)} months)</div>`;
-  $("rotationResult").innerHTML=html;
-}
-
-async function connectESP32(){
-  if(!("serial" in navigator)){
-    alert("Web Serial is not available in this browser. Use Google Chrome or Microsoft Edge on the laptop.");
-    return;
-  }
-  try{
-    serialPort=await navigator.serial.requestPort();
-    await serialPort.open({baudRate:115200});
-    $("connectBtn").disabled=true;$("disconnectBtn").disabled=false;
-    $("serialStatus").textContent="ESP32 connected — waiting for SOIL data...";
-    $("serialStatus").className="status connected";
-    readSerial();
-  }catch(e){
-    $("serialStatus").textContent="ESP32 connection failed: "+e.message;
-  }
-}
-
-async function readSerial(){
-  if(!serialPort)return;
-  const decoder=new TextDecoderStream();
-  serialPort.readable.pipeTo(decoder.writable).catch(()=>{});
-  reader=decoder.readable.getReader();
-  try{
-    while(true){
-      const {value,done}=await reader.read();
-      if(done)break;
-      serialBuffer+=value;
-      const lines=serialBuffer.split(/\r?\n/);
-      serialBuffer=lines.pop();
-      for(const line of lines) processSerialLine(line.trim());
+  for (const feature of FEATURES) {
+    if (!ranges[feature]) {
+      continue;
     }
-  }catch(e){}
+
+    const status = parameterStatus(
+      values[feature],
+      ranges[feature].low,
+      ranges[feature].high
+    );
+
+    statuses[feature] = status;
+
+    if (status === "LOW") {
+      alerts.push(`${feature.toUpperCase()} is LOW.`);
+    }
+
+    if (status === "HIGH") {
+      alerts.push(`${feature.toUpperCase()} is HIGH.`);
+    }
+  }
+
+  let irrigation = "MOISTURE NORMAL";
+
+  if (ranges.moisture) {
+    if (
+      values.moisture <
+      ranges.moisture.low
+    ) {
+      irrigation = "IRRIGATION REQUIRED";
+    } else if (
+      values.moisture >
+      ranges.moisture.high
+    ) {
+      irrigation = "SOIL TOO WET";
+    }
+  }
+
+  return {
+    alerts,
+    statuses,
+    irrigation
+  };
 }
 
-function processSerialLine(line){
-  if(!line.startsWith("SOIL,"))return;
-  const p=line.split(",");
-  if(p.length!==8)return;
-  const vals=[p[1],p[2],p[3],p[4],p[5],p[6],p[7]].map(Number);
-  if(vals.some(Number.isNaN))return;
-  ["moisture","temperature","ph","ec","nitrogen","phosphorus","potassium"].forEach((id,i)=>{
-    // Ignore NPK placeholder -1 from the current repository firmware.
-    if(vals[i]!==-1)$(id).value=vals[i];
+function predictHealth(crop, values) {
+  const ranges = CROPS[crop]?.ranges || {};
+
+  let ok = 0;
+  let checked = 0;
+
+  for (const feature of FEATURES) {
+    if (!ranges[feature]) {
+      continue;
+    }
+
+    checked++;
+
+    if (
+      values[feature] >= ranges[feature].low &&
+      values[feature] <= ranges[feature].high
+    ) {
+      ok++;
+    }
+  }
+
+  const ratio =
+    checked > 0
+      ? ok / checked
+      : 0;
+
+  let prediction = "Critical";
+
+  if (ratio >= 0.85) {
+    prediction = "Healthy";
+  } else if (ratio >= 0.55) {
+    prediction = "Warning";
+  }
+
+  const confidence =
+    Math.round(
+      (0.60 + Math.abs(ratio - 0.5) * 0.75) *
+      1000
+    ) / 10;
+
+  return {
+    prediction,
+    confidence: Math.min(
+      99.9,
+      confidence
+    )
+  };
+}
+
+function detectSoilType(values) {
+  const characteristics = [];
+
+  let soilType;
+
+  if (values.ph < 6.0) {
+    soilType = "Acidic Soil";
+
+    characteristics.push(
+      "⚠️ Acidic - Consider lime application"
+    );
+  } else if (values.ph > 7.5) {
+    soilType = "Alkaline Soil";
+
+    characteristics.push(
+      "⚠️ Alkaline - Consider sulfur or organic matter"
+    );
+  } else {
+    soilType = "Neutral Soil";
+
+    characteristics.push(
+      "✓ Neutral pH - Suitable for most crops"
+    );
+  }
+
+  if (values.ec > 2.0) {
+    characteristics.push(
+      "🧂 High Salinity - May need drainage improvement"
+    );
+  } else if (values.ec < 0.5) {
+    characteristics.push(
+      "📊 Low fertility - Consider adding nutrients"
+    );
+  }
+
+  if (values.moisture < 30) {
+    characteristics.push(
+      "🏜️ Dry soil - Improve water retention with organic matter"
+    );
+  } else if (values.moisture > 70) {
+    characteristics.push(
+      "💧 High moisture - Improve drainage to prevent waterlogging"
+    );
+  } else {
+    characteristics.push(
+      "💧 Good moisture retention"
+    );
+  }
+
+  if (values.nitrogen < 40) {
+    characteristics.push(
+      "⬇️ Low nitrogen - Apply nitrogen fertilizer"
+    );
+  } else if (values.nitrogen > 120) {
+    characteristics.push(
+      "⬆️ High nitrogen - Avoid over-fertilization"
+    );
+  }
+
+  return {
+    soilType,
+    characteristics
+  };
+}
+
+function readTrainingData() {
+  if (!fs.existsSync(CSV_FILE)) {
+    return [];
+  }
+
+  const content = fs
+    .readFileSync(CSV_FILE, "utf8")
+    .trim();
+
+  if (!content) {
+    return [];
+  }
+
+  const lines =
+    content.split(/\r?\n/);
+
+  const headers =
+    lines[0]
+      .split(",")
+      .map(x => x.trim());
+
+  return lines.slice(1).map(line => {
+    const cells = line.split(",");
+    const row = {};
+
+    headers.forEach((header, index) => {
+      row[header] =
+        cells[index]?.trim() || "";
+    });
+
+    return row;
   });
-  $("serialStatus").textContent="ESP32 connected — live sensor data received";
-  $("serialStatus").className="status connected";
-  analyze();
 }
 
-async function disconnectESP32(){
-  try{if(reader)await reader.cancel();}catch(e){}
-  try{if(serialPort)await serialPort.close();}catch(e){}
-  serialPort=null;reader=null;
-  $("connectBtn").disabled=false;$("disconnectBtn").disabled=true;
-  $("serialStatus").textContent="ESP32 disconnected — manual input mode";
-  $("serialStatus").className="status";
+const TRAINING_DATA =
+  readTrainingData();
+
+function findAlternativeCrops(values) {
+  if (!TRAINING_DATA.length) {
+    return [];
+  }
+
+  const suitable = [];
+
+  const cropNames =
+    [...new Set(
+      TRAINING_DATA.map(row => row.Crop)
+    )];
+
+  for (const crop of cropNames) {
+    const rows =
+      TRAINING_DATA.filter(row =>
+        row.Crop === crop &&
+        (
+          row.Status === "Optimal" ||
+          row.Status === "Normal"
+        )
+      );
+
+    if (!rows.length) {
+      continue;
+    }
+
+    const names = {
+      moisture: "Moisture",
+      temperature: "Temperature",
+      ph: "pH",
+      ec: "EC",
+      nitrogen: "Nitrogen",
+      phosphorus: "Phosphorus",
+      potassium: "Potassium"
+    };
+
+    let matches = 0;
+
+    for (const feature of FEATURES) {
+      const numbers =
+        rows
+          .map(row =>
+            Number(row[names[feature]])
+          )
+          .filter(Number.isFinite);
+
+      if (!numbers.length) {
+        continue;
+      }
+
+      const min =
+        Math.min(...numbers);
+
+      const max =
+        Math.max(...numbers);
+
+      if (
+        values[feature] >= min &&
+        values[feature] <= max
+      ) {
+        matches++;
+      }
+    }
+
+    if (matches >= 5) {
+      suitable.push({
+        crop,
+        match_score:
+          (matches / 7) * 100
+      });
+    }
+  }
+
+  return suitable.sort(
+    (a, b) =>
+      b.match_score - a.match_score
+  );
 }
 
-$("testBtn").addEventListener("click",analyze);
-$("rotationBtn").addEventListener("click",planRotation);
-$("connectBtn").addEventListener("click",connectESP32);
-$("disconnectBtn").addEventListener("click",disconnectESP32);
+function sequenceCropsForRotation(
+  selectedCrops,
+  values
+) {
+  const scored =
+    selectedCrops.map(crop => {
+      let score = 0;
 
-document.querySelectorAll(".tab").forEach(btn=>btn.addEventListener("click",()=>{
-  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
-  document.querySelectorAll(".tab-content").forEach(x=>x.classList.remove("active"));
-  btn.classList.add("active");$(btn.dataset.tab).classList.add("active");
-}));
+      const profile =
+        CROPS[crop];
 
-loadProfiles();
+      if (profile?.ranges) {
+        for (
+          const nutrient of [
+            "nitrogen",
+            "phosphorus",
+            "potassium"
+          ]
+        ) {
+          const range =
+            profile.ranges[nutrient];
+
+          if (
+            range &&
+            values[nutrient] >= range.low &&
+            values[nutrient] <= range.high
+          ) {
+            score += 2;
+          }
+        }
+      }
+
+      if (
+        CROP_ROTATION_DATA[crop]
+          ?.nitrogen_usage === "Low"
+      ) {
+        score += 1;
+      }
+
+      return {
+        crop,
+        score
+      };
+    });
+
+  return scored
+    .sort(
+      (a, b) =>
+        b.score - a.score
+    )
+    .map(item => [
+      item.crop,
+      CROP_ROTATION_DATA[item.crop]
+        ?.growing_season || 60
+    ]);
+}
+
+function calculateRotationTimeline(
+  sequenced
+) {
+  const timeline = [];
+
+  let currentDay = 0;
+
+  const restGap = 14;
+
+  sequenced.forEach(
+    ([crop, duration], index) => {
+      const endDay =
+        currentDay + duration;
+
+      timeline.push({
+        sequence: index + 1,
+        crop,
+        start_day: currentDay,
+        end_day: endDay,
+        duration,
+        rotation_data:
+          CROP_ROTATION_DATA[crop] || {
+            growing_season: duration,
+            crop_type: "Crop",
+            nitrogen_usage: "Medium",
+            benefits:
+              "General rotation benefit"
+          }
+      });
+
+      currentDay =
+        endDay + restGap;
+    }
+  );
+
+  return timeline;
+}
+
+/* ================================
+   API
+================================ */
+
+app.get(
+  "/api/crops",
+  (req, res) => {
+    res.json(
+      Object.keys(CROPS)
+    );
+  }
+);
+
+app.post(
+  "/api/analyze",
+  (req, res) => {
+    const crop =
+      req.body.crop;
+
+    const values =
+      req.body.values || {};
+
+    if (
+      !crop ||
+      !CROPS[crop]
+    ) {
+      return res.status(400).json({
+        error: "Invalid crop."
+      });
+    }
+
+    for (
+      const feature of FEATURES
+    ) {
+      values[feature] =
+        Number(values[feature]);
+
+      if (
+        !Number.isFinite(
+          values[feature]
+        )
+      ) {
+        return res.status(400).json({
+          error:
+            `Invalid value for ${feature}.`
+        });
+      }
+    }
+
+    const prediction =
+      predictHealth(
+        crop,
+        values
+      );
+
+    const soil =
+      detectSoilType(values);
+
+    const alerts =
+      generateAlerts(
+        crop,
+        values
+      );
+
+    const alternatives =
+      prediction.prediction !==
+      "Healthy"
+        ? findAlternativeCrops(
+            values
+          ).slice(0, 3)
+        : [];
+
+    res.json({
+      crop,
+      prediction,
+      soil,
+      ...alerts,
+      alternatives,
+      advice:
+        CROPS[crop].advice || []
+    });
+  }
+);
+
+app.post(
+  "/api/rotation",
+  (req, res) => {
+    const selected =
+      [
+        ...new Set(
+          req.body.crops || []
+        )
+      ].filter(
+        crop => CROPS[crop]
+      );
+
+    if (!selected.length) {
+      return res.status(400).json({
+        error:
+          "Select at least one crop."
+      });
+    }
+
+    const values = {};
+
+    for (
+      const feature of FEATURES
+    ) {
+      values[feature] =
+        Number(
+          req.body.values?.[feature] ||
+          0
+        );
+    }
+
+    const sequenced =
+      sequenceCropsForRotation(
+        selected,
+        values
+      );
+
+    const timeline =
+      calculateRotationTimeline(
+        sequenced
+      );
+
+    const totalDays =
+      timeline.length
+        ? timeline[
+            timeline.length - 1
+          ].end_day
+        : 0;
+
+    res.json({
+      timeline,
+      totalDays,
+      months:
+        totalDays / 30
+    });
+  }
+);
+
+/* ================================
+   FRONTEND
+================================ */
+
+app.get(
+  "/",
+  (req, res) => {
+    res.send(`
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+  name="viewport"
+  content="width=device-width,initial-scale=1"
+>
+
+<title>
+Multi-Crop Soil Advisor
+</title>
+
+<style>
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f4f8f2;
+  color: #263238;
+}
+
+.container {
+  max-width: 1180px;
+  margin: auto;
+  padding: 30px 20px;
+}
+
+.hero,
+.card {
+  background: white;
+  border: 1px solid #a5d6a7;
+  border-radius: 20px;
+  box-shadow:
+    0 12px 30px #26323812;
+  padding: 24px;
+}
+
+.hero {
+  margin-bottom: 20px;
+
+  background:
+    linear-gradient(
+      135deg,
+      #f4f8f2,
+      #edf6ee
+    );
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 800;
+}
+
+.badge {
+  display: inline-block;
+
+  background: #e8f5e9;
+
+  color: #2e7d32;
+
+  padding: 8px 14px;
+
+  border-radius: 999px;
+
+  font-weight: 700;
+}
+
+button {
+  background:
+    linear-gradient(
+      135deg,
+      #2e7d32,
+      #66bb6a
+    );
+
+  color: white;
+
+  border: 0;
+
+  border-radius: 12px;
+
+  padding: 12px 20px;
+
+  font-weight: 800;
+
+  cursor: pointer;
+}
+
+button:hover {
+  opacity: 0.9;
+}
+
+.grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, 1fr);
+
+  gap: 15px;
+}
+
+label {
+  display: block;
+
+  font-weight: 700;
+
+  margin:
+    12px 0 6px;
+}
+
+input,
+select {
+  width: 100%;
+
+  padding: 11px;
+
+  border:
+    1px solid #a5d6a7;
+
+  border-radius: 10px;
+
+  font-size: 16px;
+}
+
+.tabs {
+  display: flex;
+
+  gap: 10px;
+
+  margin: 20px 0;
+}
+
+.tab {
+  background: #e8f5e9;
+
+  color: #2e7d32;
+}
+
+.tab.active {
+  background: #2e7d32;
+
+  color: white;
+}
+
+.result {
+  margin-top: 20px;
+}
+
+.ok {
+  background: #e8f5e9;
+
+  padding: 15px;
+
+  border-radius: 12px;
+}
+
+.warn {
+  background: #fff8e1;
+
+  padding: 15px;
+
+  border-radius: 12px;
+}
+
+.bad {
+  background: #ffebee;
+
+  padding: 15px;
+
+  border-radius: 12px;
+}
+
+table {
+  width: 100%;
+
+  border-collapse:
+    collapse;
+
+  margin-top: 15px;
+}
+
+th,
+td {
+  padding: 10px;
+
+  border-bottom:
+    1px solid #ddd;
+
+  text-align: left;
+}
+
+.metric-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, 1fr);
+
+  gap: 15px;
+}
+
+.metric {
+  padding: 18px;
+
+  background: white;
+
+  border:
+    1px solid #a5d6a7;
+
+  border-radius: 15px;
+}
+
+.hidden {
+  display: none;
+}
+
+.muted {
+  color: #607d68;
+}
+
+@media(max-width:700px) {
+
+  .grid,
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .container {
+    padding: 15px;
+  }
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<section
+  id="landing"
+  class="hero"
+>
+
+<span class="badge">
+SMART FARMING
+</span>
+
+<h1>
+Grow healthier crops with
+smart soil insights.
+</h1>
+
+<p>
+A soil advisory system for
+monitoring soil health,
+detecting imbalances and
+planning better crop rotations.
+</p>
+
+<div class="grid">
+
+<div class="card">
+
+<b>Soil Health</b>
+
+<h2>AI</h2>
+
+</div>
+
+<div class="card">
+
+<b>Crop Planning</b>
+
+<h2>360°</h2>
+
+</div>
+
+<div class="card">
+
+<b>Farm Impact</b>
+
+<h2>+30%</h2>
+
+</div>
+
+</div>
+
+<br>
+
+<button
+  onclick="showApp()"
+>
+Next →
+</button>
+
+</section>
+
+
+<section
+  id="app"
+  class="hidden"
+>
+
+<h1>
+🌱 Multi-Crop Soil Advisor
+</h1>
+
+<p class="muted">
+
+AI Soil Health Alert System —
+enter sensor values manually
+for testing.
+
+ESP32 values can later be
+sent to these API endpoints.
+
+</p>
+
+
+<div class="card">
+
+<div class="grid">
+
+<div>
+
+<label>
+Primary Crop
+</label>
+
+<select
+  id="crop"
+></select>
+
+</div>
+
+
+<div>
+
+<label>
+Soil Moisture (%)
+</label>
+
+<input
+  id="moisture"
+  type="number"
+  min="0"
+  max="100"
+  step=".1"
+>
+
+</div>
+
+
+<div>
+
+<label>
+Soil Temperature (°C)
+</label>
+
+<input
+  id="temperature"
+  type="number"
+  min="0"
+  max="60"
+  step=".1"
+>
+
+</div>
+
+
+<div>
+
+<label>
+Soil pH
+</label>
+
+<input
+  id="ph"
+  type="number"
+  min="0"
+  max="14"
+  step=".1"
+>
+
+</div>
+
+
+<div>
+
+<label>
+EC (mS/cm)
+</label>
+
+<input
+  id="ec"
+  type="number"
+  min="0"
+  max="20"
+  step=".01"
+>
+
+</div>
+
+
+<div>
+
+<label>
+Nitrogen (N)
+</label>
+
+<input
+  id="nitrogen"
+  type="number"
+  min="0"
+  max="500"
+  step="1"
+>
+
+</div>
+
+
+<div>
+
+<label>
+Phosphorus (P)
+</label>
+
+<input
+  id="phosphorus"
+  type="number"
+  min="0"
+  max="500"
+  step="1"
+>
+
+</div>
+
+
+<div>
+
+<label>
+Potassium (K)
+</label>
+
+<input
+  id="potassium"
+  type="number"
+  min="0"
+  max="500"
+  step="1"
+>
+
+</div>
+
+</div>
+
+<br>
+
+<button
+  onclick="analyze()"
+>
+🔍 TEST SOIL HEALTH
+</button>
+
+</div>
+
+
+<div
+  id="result"
+  class="result"
+></div>
+
+
+<div class="tabs">
+
+<button
+  class="tab active"
+  onclick="
+    openTab('single',this)
+  "
+>
+🔍 Single Crop Analysis
+</button>
+
+<button
+  class="tab"
+  onclick="
+    openTab('rotation',this)
+  "
+>
+🌾 Multi-Crop Rotation Planning
+</button>
+
+</div>
+
+
+<div
+  id="rotation"
+  class="hidden card"
+>
+
+<h2>
+🌾 Crop Rotation
+& Sequencing Plan
+</h2>
+
+<p>
+Select up to 3 crops based
+on current soil conditions.
+</p>
+
+<div class="grid">
+
+<div>
+
+<label>Crop 1</label>
+
+<select id="r1"></select>
+
+</div>
+
+<div>
+
+<label>Crop 2</label>
+
+<select id="r2"></select>
+
+</div>
+
+<div>
+
+<label>Crop 3</label>
+
+<select id="r3"></select>
+
+</div>
+
+</div>
+
+<br>
+
+<button
+  onclick="rotation()"
+>
+📅 Plan Crop Rotation
+</button>
+
+<div
+  id="rotationResult"
+></div>
+
+</div>
+
+</section>
+
+</div>
+
+
+<script>
+
+let crops = [];
+
+const fields = [
+  "moisture",
+  "temperature",
+  "ph",
+  "ec",
+  "nitrogen",
+  "phosphorus",
+  "potassium"
+];
+
+
+function showApp() {
+
+  document
+    .getElementById("landing")
+    .classList
+    .add("hidden");
+
+  document
+    .getElementById("app")
+    .classList
+    .remove("hidden");
+
+}
+
+
+function openTab(id, btn) {
+
+  document
+    .getElementById("rotation")
+    .classList
+    .toggle(
+      "hidden",
+      id !== "rotation"
+    );
+
+  document
+    .querySelectorAll(".tab")
+    .forEach(
+      x =>
+        x.classList
+          .remove("active")
+    );
+
+  btn.classList.add("active");
+
+}
+
+
+function fillSelect(
+  id,
+  values
+) {
+
+  const element =
+    document.getElementById(id);
+
+  element.innerHTML = "";
+
+  values.forEach(crop => {
+
+    const option =
+      document.createElement(
+        "option"
+      );
+
+    option.value = crop;
+
+    option.textContent = crop;
+
+    element.appendChild(
+      option
+    );
+
+  });
+
+}
+
+
+async function init() {
+
+  crops =
+    await (
+      await fetch(
+        "/api/crops"
+      )
+    ).json();
+
+  fillSelect(
+    "crop",
+    crops
+  );
+
+  fillSelect(
+    "r1",
+    crops
+  );
+
+  fillSelect(
+    "r2",
+    crops
+  );
+
+  fillSelect(
+    "r3",
+    crops
+  );
+
+}
+
+
+function getValues() {
+
+  const values = {};
+
+  fields.forEach(
+    field => {
+
+      values[field] =
+        Number(
+          document
+            .getElementById(field)
+            .value || 0
+        );
+
+    }
+  );
+
+  return values;
+
+}
+
+
+async function analyze() {
+
+  const crop =
+    document
+      .getElementById("crop")
+      .value;
+
+  const data =
+    await (
+      await fetch(
+        "/api/analyze",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body:
+            JSON.stringify({
+              crop,
+              values:
+                getValues()
+            })
+        }
+      )
+    ).json();
+
+
+  if (data.error) {
+
+    document
+      .getElementById("result")
+      .innerHTML =
+        "<div class='bad'>" +
+        data.error +
+        "</div>";
+
+    return;
+
+  }
+
+
+  let html =
+    "<div class='card'>";
+
+
+  html +=
+    "<h2>" +
+    "Soil Health Result — " +
+    crop +
+    "</h2>";
+
+
+  html +=
+    "<div class='metric-grid'>";
+
+
+  html +=
+    "<div class='metric'>" +
+    "<b>Status</b>" +
+    "<h2>" +
+    data.prediction.prediction +
+    "</h2>" +
+    "</div>";
+
+
+  html +=
+    "<div class='metric'>" +
+    "<b>AI Confidence</b>" +
+    "<h2>" +
+    data.prediction.confidence +
+    "%</h2>" +
+    "</div>";
+
+
+  html +=
+    "<div class='metric'>" +
+    "<b>Soil Type</b>" +
+    "<h2>" +
+    data.soil.soilType +
+    "</h2>" +
+    "</div>";
+
+
+  html +=
+    "</div>";
+
+
+  html +=
+    "<h3>" +
+    "🏞️ Soil Type Analysis" +
+    "</h3>";
+
+
+  html +=
+    "<ul>" +
+    data.soil.characteristics
+      .map(
+        x =>
+          "<li>" +
+          x +
+          "</li>"
+      )
+      .join("") +
+    "</ul>";
+
+
+  html +=
+    "<h3>" +
+    "📊 Parameter Analysis" +
+    "</h3>";
+
+
+  html +=
+    "<table>" +
+    "<tr>" +
+    "<th>Parameter</th>" +
+    "<th>Value</th>" +
+    "<th>Status</th>" +
+    "</tr>";
+
+
+  const names = {
+
+    moisture:
+      "Soil Moisture",
+
+    temperature:
+      "Temperature",
+
+    ph:
+      "pH",
+
+    ec:
+      "EC",
+
+    nitrogen:
+      "Nitrogen",
+
+    phosphorus:
+      "Phosphorus",
+
+    potassium:
+      "Potassium"
+
+  };
+
+
+  const currentValues =
+    getValues();
+
+
+  fields.forEach(field => {
+
+    html +=
+      "<tr>" +
+      "<td>" +
+      names[field] +
+      "</td>" +
+      "<td>" +
+      currentValues[field] +
+      "</td>" +
+      "<td>" +
+      data.statuses[field] +
+      "</td>" +
+      "</tr>";
+
+  });
+
+
+  html +=
+    "</table>";
+
+
+  html +=
+    "<h3>" +
+    "💧 Irrigation Alert" +
+    "</h3>";
+
+
+  let irrigationClass =
+    "ok";
+
+
+  if (
+    data.irrigation ===
+    "SOIL TOO WET"
+  ) {
+
+    irrigationClass = "bad";
+
+  } else if (
+    data.irrigation !==
+    "MOISTURE NORMAL"
+  ) {
+
+    irrigationClass = "warn";
+
+  }
+
+
+  html +=
+    "<div class='" +
+    irrigationClass +
+    "'>" +
+    data.irrigation +
+    "</div>";
+
+
+  html +=
+    "<h3>" +
+    "⚠️ Parameter Alerts" +
+    "</h3>";
+
+
+  if (data.alerts.length) {
+
+    html +=
+      data.alerts
+        .map(
+          alert =>
+            "<div class='warn'>" +
+            alert +
+            "</div>"
+        )
+        .join("");
+
+  } else {
+
+    html +=
+      "<div class='ok'>" +
+      "All monitored parameters are " +
+      "within the configured crop ranges." +
+      "</div>";
+
+  }
+
+
+  html +=
+    "<h3>" +
+    "🌱 Crop Advice" +
+    "</h3>";
+
+
+  html +=
+    "<ul>" +
+    (data.advice || [])
+      .map(
+        advice =>
+          "<li>" +
+          advice +
+          "</li>"
+      )
+      .join("") +
+    "</ul>";
+
+
+  if (
+    data.alternatives &&
+    data.alternatives.length
+  ) {
+
+    html +=
+      "<h3>" +
+      "🌾 Suitable Alternative Crops" +
+      "</h3>";
+
+
+    html +=
+      data.alternatives
+        .map(
+          (item, index) =>
+            "<div class='ok'>" +
+            (index + 1) +
+            ". <b>" +
+            item.crop +
+            "</b> — Compatibility: " +
+            item.match_score
+              .toFixed(1) +
+            "%" +
+            "</div>"
+        )
+        .join("");
+
+  }
+
+
+  html += "</div>";
+
+
+  document
+    .getElementById("result")
+    .innerHTML = html;
+
+}
+
+
+async function rotation() {
+
+  const values =
+    getValues();
+
+
+  const selectedCrops = [
+
+    document
+      .getElementById("r1")
+      .value,
+
+    document
+      .getElementById("r2")
+      .value,
+
+    document
+      .getElementById("r3")
+      .value
+
+  ];
+
+
+  const data =
+    await (
+      await fetch(
+        "/api/rotation",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body:
+            JSON.stringify({
+              crops:
+                selectedCrops,
+              values
+            })
+        }
+      )
+    ).json();
+
+
+  if (data.error) {
+
+    document
+      .getElementById(
+        "rotationResult"
+      )
+      .innerHTML =
+        "<div class='bad'>" +
+        data.error +
+        "</div>";
+
+    return;
+
+  }
+
+
+  let html =
+    "<hr>" +
+    "<h3>" +
+    "📊 Optimal Crop Rotation Sequence" +
+    "</h3>";
+
+
+  data.timeline.forEach(
+    item => {
+
+      html +=
+        "<div class='card'>" +
+
+        "<h3>" +
+        "Step " +
+        item.sequence +
+        ": " +
+        item.crop +
+        "</h3>" +
+
+        "<p>" +
+
+        "Duration: " +
+        item.duration +
+        " days<br>" +
+
+        "Type: " +
+        item.rotation_data.crop_type +
+        "<br>" +
+
+        "N Usage: " +
+        item.rotation_data.nitrogen_usage +
+        "<br>" +
+
+        "Benefit: " +
+        item.rotation_data.benefits +
+
+        "</p>" +
+
+        "</div>";
+
+    }
+  );
+
+
+  html +=
+    "<div class='ok'>" +
+
+    "<b>Total Rotation Cycle:</b> " +
+
+    data.totalDays +
+
+    " days (" +
+
+    data.months.toFixed(1) +
+
+    " months)" +
+
+    "</div>";
+
+
+  html +=
+    "<h3>" +
+    "✨ Crop Rotation Benefits" +
+    "</h3>";
+
+
+  html +=
+    "<ul>" +
+
+    "<li>Maintains soil fertility</li>" +
+
+    "<li>Reduces pest buildup</li>" +
+
+    "<li>Improves soil structure</li>" +
+
+    "<li>Allow 14 days rest between crops</li>" +
+
+    "</ul>";
+
+
+  document
+    .getElementById(
+      "rotationResult"
+    )
+    .innerHTML = html;
+
+}
+
+
+init();
+
+</script>
+
+</body>
+
+</html>
+`);
+  }
+);
+
+
+app.listen(
+  PORT,
+  () => {
+
+    console.log(
+      "🌱 Multi-Crop Soil Advisor running at " +
+      `http://localhost:${PORT}`
+    );
+
+  }
+);
