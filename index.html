@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multi-Crop Soil Advisor</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div>
+      <div class="badge">SMART FARMING</div>
+      <h1>🌱 Multi-Crop Soil Advisor</h1>
+      <p>AI Soil Health Alert System</p>
+    </div>
+    <div class="header-actions">
+      <button id="connectBtn" class="primary">🔌 Connect ESP32</button>
+      <button id="disconnectBtn" disabled>Disconnect</button>
+      <select id="language">
+        <option value="en">English</option>
+        <option value="kn">ಕನ್ನಡ</option>
+      </select>
+    </div>
+  </header>
+
+  <main>
+    <section class="intro">
+      <h2>Grow healthier crops with smart soil insights.</h2>
+      <p>Monitor soil parameters, detect soil-health risks, receive crop advice and plan multi-crop rotations.</p>
+      <div id="serialStatus" class="status">ESP32 not connected — manual input mode</div>
+    </section>
+
+    <section class="panel">
+      <div class="grid">
+        <label>Primary Crop
+          <select id="crop"></select>
+        </label>
+        <label>Soil Moisture (%)
+          <input id="moisture" type="number" min="0" max="100" step="0.1">
+        </label>
+        <label>Soil Temperature (°C)
+          <input id="temperature" type="number" min="-20" max="80" step="0.1">
+        </label>
+        <label>Soil pH
+          <input id="ph" type="number" min="0" max="14" step="0.01">
+        </label>
+        <label>EC (mS/cm)
+          <input id="ec" type="number" min="0" max="100" step="0.01">
+        </label>
+        <label>Nitrogen (N)
+          <input id="nitrogen" type="number" min="0" max="500" step="1">
+        </label>
+        <label>Phosphorus (P)
+          <input id="phosphorus" type="number" min="0" max="500" step="1">
+        </label>
+        <label>Potassium (K)
+          <input id="potassium" type="number" min="0" max="500" step="1">
+        </label>
+      </div>
+      <button id="testBtn" class="primary big">🔍 TEST SOIL HEALTH</button>
+    </section>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="analysis">🔍 Single Crop Analysis</button>
+      <button class="tab" data-tab="rotation">🌾 Multi-Crop Rotation Planning</button>
+    </div>
+
+    <section id="analysis" class="tab-content active">
+      <div id="result"></div>
+    </section>
+
+    <section id="rotation" class="tab-content">
+      <div class="panel">
+        <h2>🌾 Crop Rotation & Sequencing Plan</h2>
+        <p>Select up to 3 crops. The system scores nutrient compatibility and places a 14-day rest gap between crops.</p>
+        <div class="grid three">
+          <label>Crop 1<select id="crop1"></select></label>
+          <label>Crop 2<select id="crop2"></select></label>
+          <label>Crop 3<select id="crop3"></select></label>
+        </div>
+        <button id="rotationBtn" class="primary">📅 Plan Crop Rotation</button>
+        <div id="rotationResult"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>📡 Hardware Data</h2>
+      <p>USB serial data expected from ESP32:</p>
+      <code>SOIL,MOISTURE,TEMPERATURE,PH,EC,N,P,K</code>
+      <p class="small">Example: <code>SOIL,52.4,25.8,6.7,1.1,80,35,60</code></p>
+    </section>
+  </main>
+
+  <footer>Multi-Crop Soil Advisor • ESP32 + JavaScript prototype</footer>
+  <script src="app.js"></script>
+</body>
+</html>

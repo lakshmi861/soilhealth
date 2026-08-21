@@ -1,0 +1,15 @@
+HARDWARE CONNECTION / CURRENT FIRMWARE
+
+The repository's current ESP32 firmware uses:
+MOISTURE -> GPIO34
+pH -> GPIO35
+EC -> GPIO32
+DS18B20 data -> GPIO4
+Serial -> USB, 115200 baud
+
+It outputs:
+SOIL,MOISTURE,TEMPERATURE,PH,EC,N,P,K
+
+NPK is currently a placeholder (-1,-1,-1) in the repository firmware, so real NPK readings require the actual NPK sensor protocol/module wiring and code.
+
+DHT11 and OLED are not read by the current repository firmware. Do not claim they are live in the demo unless they are actually connected and programmed.
